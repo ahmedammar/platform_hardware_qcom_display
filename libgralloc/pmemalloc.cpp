@@ -54,6 +54,18 @@ static int getPmemTotalSize(int fd, size_t* size)
     return err;
 }
 
+static int getPmemPhys(int fd, unsigned long* addr)
+{
+    int err = 0;
+    pmem_region region;
+    err = ioctl(fd, PMEM_GET_PHYS, &region);
+    if (err == 0) {
+        *addr = region.offset;
+    }
+    LOGI("getPmemPhys: %lx", *addr);
+    return err;
+}
+
 static int getOpenFlags(bool uncached)
 {
     if(uncached)
@@ -84,11 +96,10 @@ static int alignPmem(int fd, size_t size, int align) {
 }
 
 static int cleanPmem(void *base, size_t size, int offset, int fd) {
-    struct pmem_addr pmem_addr;
-    pmem_addr.vaddr = (unsigned long) base;
-    pmem_addr.offset = offset;
-    pmem_addr.length = size;
-    return ioctl(fd, PMEM_CLEAN_INV_CACHES, &pmem_addr);
+    struct pmem_region pmem_region;
+    pmem_region.offset = offset;
+    pmem_region.len = size;
+    return ioctl(fd, PMEM_CACHE_FLUSH, &pmem_region);
 }
 
 //-------------- PmemUserspaceAlloc-----------------------//
@@ -111,6 +122,7 @@ int PmemUserspaceAlloc::init_pmem_area_locked()
     int fd = open(mPmemDev, O_RDWR, 0);
     if (fd >= 0) {
         size_t size = 0;
+        unsigned long phys = 0;
         err = getPmemTotalSize(fd, &size);
         LOGD("%s: Total pmem size: %d", __FUNCTION__, size);
         if (err < 0) {
@@ -133,6 +145,12 @@ int PmemUserspaceAlloc::init_pmem_area_locked()
             mMasterFd = fd;
             mMasterBase = base;
         }
+
+        err = getPmemPhys(fd, &phys);
+        if (err < 0) {
+            LOGE("%s: PMEM_GET_PHYS failed (%d), limp mode", mPmemDev, err);
+        }
+        mMasterPhys = phys;
     } else {
         LOGE("%s: Failed to open pmem device: %s", mPmemDev,
                 strerror(errno));
@@ -209,6 +227,7 @@ int PmemUserspaceAlloc::alloc_buffer(alloc_data& data)
                 cacheflush(intptr_t(base) + offset, intptr_t(base) + offset + size, 0);
                 data.base = base;
                 data.offset = offset;
+                data.phys = mMasterPhys + offset;
                 data.fd = fd;
             }
         }

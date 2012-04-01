@@ -33,6 +33,7 @@
 #include <linux/ion.h>
 #include <utils/RefBase.h>
 #include "memalloc.h"
+#include <sys/ioctl.h>
 
 namespace gralloc {
     class PmemUserspaceAlloc : public IMemAlloc  {
@@ -68,6 +69,7 @@ namespace gralloc {
         private:
             int mMasterFd;
             void* mMasterBase;
+            unsigned long mMasterPhys;
             const char* mPmemDev;
             android::sp<Allocator> mAllocator;
             pthread_mutex_t mLock;

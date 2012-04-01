@@ -359,7 +359,7 @@ int getCompositionType() {
 int qcomuiClearRegion(Region region, EGLDisplay dpy, EGLSurface sur)
 {
     int ret = 0;
-
+#if 0
     if (-1 == sCompositionType) {
         sCompositionType = getCompositionType();
     }
@@ -407,6 +407,6 @@ int qcomuiClearRegion(Region region, EGLDisplay dpy, EGLSurface sur)
             dst += stride;
         } while(--h);
     }
-
+#endif
     return 0;
 }

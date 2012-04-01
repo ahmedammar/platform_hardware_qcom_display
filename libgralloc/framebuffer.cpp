@@ -49,6 +49,11 @@
 #include <cutils/properties.h>
 #endif
 
+extern "C" {
+#include <xf86drm.h>
+#include <xf86drmMode.h>
+}
+
 #define FB_DEBUG 0
 
 #if defined(HDMI_DUAL_DISPLAY)
@@ -331,9 +336,9 @@ static void *disp_loop(void *ptr)
         // post buf out to display synchronously
         private_handle_t const* hnd = reinterpret_cast<private_handle_t const*>
                                                 (nxtBuf.buf);
-        const size_t offset = hnd->base - m->framebuffer->base;
+        /*const size_t offset = hnd->base - m->framebuffer->base;
         m->info.activate = FB_ACTIVATE_VBL;
-        m->info.yoffset = offset / m->finfo.line_length;
+        m->info.yoffset = offset / m->finfo.line_length;*/
 
 #if defined(HDMI_DUAL_DISPLAY)
         pthread_mutex_lock(&m->overlayLock);
@@ -343,10 +348,14 @@ static void *disp_loop(void *ptr)
         pthread_cond_signal(&(m->overlayPost));
         pthread_mutex_unlock(&m->overlayLock);
 #endif
-        if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
+        /*if (ioctl(m->framebuffer->fd, FBIOPUT_VSCREENINFO, &m->info) == -1) {
             LOGE("ERROR FBIOPUT_VSCREENINFO failed; frame not displayed");
+        }*/
+        if (int err = drmModePageFlip(m->framebuffer->fd, 0x3, 0xD, 0, NULL)) {
+            if (err < 0)
+                err = -err;
+            LOGE("drmModePageFlip failed. (%d: %s)", err, strerror(err));
         }
-
 #if defined COMPOSITION_BYPASS
         //Signal so that we can close channels if we need to
         pthread_mutex_lock(&m->bufferPostLock);
@@ -724,13 +733,14 @@ static int fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
                 0, 0, m->info.xres, m->info.yres,
                 &buffer_vaddr);
 
+        LOGI("slow copy mode ...");
         //memcpy(fb_vaddr, buffer_vaddr, m->finfo.line_length * m->info.yres);
 
-        msm_copy_buffer(
+        /*msm_copy_buffer(
                 m->framebuffer, m->framebuffer->fd,
                 m->info.xres, m->info.yres, m->fbFormat,
                 m->info.xoffset, m->info.yoffset,
-                m->info.width, m->info.height);
+                m->info.width, m->info.height);*/
 
         m->base.unlock(&m->base, buffer);
         m->base.unlock(&m->base, m->framebuffer);
@@ -836,11 +846,11 @@ int mapFrameBufferLocked(struct private_module_t* module)
          * not use the MDP for composition (i.e. hw composition == 0), ask for
          * RGBA instead of RGBX. */
         if (property_get("debug.sf.hw", property, NULL) > 0 && atoi(property) == 0)
-            module->fbFormat = HAL_PIXEL_FORMAT_RGBX_8888;
+            module->fbFormat = HAL_PIXEL_FORMAT_BGRA_8888;
         else if(property_get("debug.composition.type", property, NULL) > 0 && (strncmp(property, "mdp", 3) == 0))
-            module->fbFormat = HAL_PIXEL_FORMAT_RGBX_8888;
+            module->fbFormat = HAL_PIXEL_FORMAT_BGRA_8888;
         else
-            module->fbFormat = HAL_PIXEL_FORMAT_RGBA_8888;
+            module->fbFormat = HAL_PIXEL_FORMAT_BGRA_8888;
     } else {
         /*
          * Explicitly request 5/6/5
@@ -1006,6 +1016,20 @@ int mapFrameBufferLocked(struct private_module_t* module)
 
     module->numBuffers = info.yres_virtual / info.yres;
     module->bufferMask = 0;
+/*
+    void* vaddr = mmap(0, fbSize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    if (vaddr == MAP_FAILED) {
+        LOGE("Error mapping the framebuffer (%s)", strerror(errno));
+        return -errno;
+    }
+    module->framebuffer->base = intptr_t(vaddr);
+    memset(vaddr, 0, fbSize);
+*/
+    if ((fd = drmOpen(NULL, "platform:imx-drm:00")) < 0) {
+        LOGE("drmOpen failed.");
+        return -errno;
+    }
+    module->framebuffer->fd = fd;
 
     void* vaddr = mmap(0, fbSize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
     if (vaddr == MAP_FAILED) {
@@ -1013,6 +1037,8 @@ int mapFrameBufferLocked(struct private_module_t* module)
         return -errno;
     }
     module->framebuffer->base = intptr_t(vaddr);
+    module->framebuffer->phys = intptr_t(finfo.smem_start);
+
     memset(vaddr, 0, fbSize);
 
 #if defined(HDMI_DUAL_DISPLAY)

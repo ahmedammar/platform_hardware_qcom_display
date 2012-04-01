@@ -126,6 +126,8 @@ int gpu_context_t::gralloc_alloc_framebuffer_locked(size_t size, int usage,
 
     hnd->base = vaddr;
     hnd->offset = vaddr - intptr_t(m->framebuffer->base);
+    hnd->phys = intptr_t(m->framebuffer->phys) + hnd->offset;
+    LOGI("gralloc_alloc_framebuffer_locked phys: %x", hnd->phys);
     *pHandle = hnd;
     return 0;
 }
@@ -167,6 +169,8 @@ int gpu_context_t::gralloc_alloc_buffer(size_t size, int usage,
 
         hnd->offset = data.offset;
         hnd->base = int(data.base) + data.offset;
+        LOGI("gralloc_alloc_buffer phys: %x", data.phys);
+        hnd->phys = data.phys;
         *pHandle = hnd;
     }
 

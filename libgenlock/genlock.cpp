@@ -30,7 +30,9 @@
 #include <cutils/log.h>
 #include <cutils/native_handle.h>
 #include <gralloc_priv.h>
+#ifdef USE_GENLOCK
 #include <linux/genlock.h>
+#endif
 #include <fcntl.h>
 #include <sys/ioctl.h>
 
@@ -39,6 +41,8 @@
 #define GENLOCK_DEVICE "/dev/genlock"
 
 namespace {
+
+#ifdef USE_GENLOCK
     /* Internal function to map the userspace locks to the kernel lock types */
     int get_kernel_lock_type(genlock_lock_type lockType)
     {
@@ -102,7 +106,7 @@ namespace {
             handle = -1;
         }
     }
-
+#endif
 }
 /*
  * Create a genlock lock. The genlock lock file descriptor and the lock

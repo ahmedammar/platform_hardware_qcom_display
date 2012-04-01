@@ -84,7 +84,7 @@ enum {
 
 /* numbers of max buffers for page flipping */
 #define NUM_FRAMEBUFFERS_MIN 2
-#define NUM_FRAMEBUFFERS_MAX 3
+#define NUM_FRAMEBUFFERS_MAX 2
 
 /* number of default bufers for page flipping */
 #define NUM_DEF_FRAME_BUFFERS 2
@@ -92,7 +92,7 @@ enum {
 #define INTERLACE_MASK 0x80
 #define S3D_FORMAT_MASK 0xFF000
 #define COLOR_FORMAT(x) (x & 0xFFF) // Max range for colorFormats is 0 - FFF
-#define DEVICE_PMEM "/dev/pmem"
+#define DEVICE_PMEM "/dev/pmem_gpu"
 #define DEVICE_PMEM_ADSP "/dev/pmem_adsp"
 #define DEVICE_PMEM_SMIPOOL "/dev/pmem_smipool"
 /*****************************************************************************/
@@ -317,6 +317,7 @@ struct private_handle_t {
     // FIXME: the attributes below should be out-of-line
     int     base;
     int     gpuaddr; // The gpu address mapped into the mmu. If using ashmem, set to 0 They don't care
+    int     phys; // The physical address of that chunk of memory. If using ashmem, set to 0 They don't care
     int     pid;
     int     format;
     int     width;
@@ -324,7 +325,7 @@ struct private_handle_t {
     int     genlockPrivFd; // local fd of the genlock device.
 
 #ifdef __cplusplus
-    static const int sNumInts = 12;
+    static const int sNumInts = 13;
     static const int sNumFds = 2;
     static const int sMagic = 'gmsm';
 

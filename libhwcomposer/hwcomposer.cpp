@@ -29,8 +29,10 @@
 #include <cutils/properties.h>
 
 #include <hardware/hwcomposer.h>
+#ifdef USE_OVERLAY
 #include <overlayLib.h>
 #include <overlayLibUI.h>
+#endif
 #include <copybit.h>
 
 #include <EGL/egl.h>
@@ -79,7 +81,9 @@ enum eHWCOverlayStatus {
 struct hwc_context_t {
     hwc_composer_device_t device;
     /* our private state goes below here */
+#ifdef USE_OVERLAY
     overlay::Overlay* mOverlayLibObject;
+#endif
     native_handle_t *previousOverlayHandle;
 #ifdef COMPOSITION_BYPASS
     overlay::OverlayUI* mOvUI[MAX_BYPASS_LAYERS];
@@ -196,6 +200,7 @@ static void setHWCOverlayStatus(hwc_context_t *ctx, bool isVideoPresent) {
     }
 }
 
+#ifdef USE_OVERLAY
 static int hwc_closeOverlayChannels(hwc_context_t* ctx) {
     overlay::Overlay *ovLibObject = ctx->mOverlayLibObject;
     if(!ovLibObject) {
@@ -213,6 +218,7 @@ static int hwc_closeOverlayChannels(hwc_context_t* ctx) {
     }
     return 0;
 }
+#endif
 
 #ifdef COMPOSITION_BYPASS
 // To-do: Merge this with other blocks & move them to a separate file.
@@ -251,6 +257,7 @@ void closeBypass(hwc_context_t* ctx) {
     }
 #endif
 
+#ifdef USE_OVERLAY
 /*
  * Configures mdp pipes
  */
@@ -339,6 +346,7 @@ void unlockPreviousOverlayBuffer(hwc_context_t* ctx)
         }
     }
 }
+#endif
 
 bool canSkipComposition(hwc_context_t* ctx, int yuvBufferCount, int currentLayerCount,
                         int numLayersNotUpdating)
@@ -735,6 +743,7 @@ static int getYUVBufferCount (const hwc_layer_list_t* list) {
 
 static int getS3DVideoFormat (const hwc_layer_list_t* list) {
     int s3dFormat = 0;
+#if 0
     if (list) {
         for (size_t i=0; i<list->numHwLayers; i++) {
             private_handle_t *hnd = (private_handle_t *)list->hwLayers[i].handle;
@@ -744,6 +753,7 @@ static int getS3DVideoFormat (const hwc_layer_list_t* list) {
                 break;
         }
     }
+#endif
     return s3dFormat;
 }
 
@@ -803,7 +813,9 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
         unlockPreviousBypassBuffers(ctx);
         unsetBypassBufferLockState(ctx);
 #endif
+#ifdef USE_OVERLAY
         unlockPreviousOverlayBuffer(ctx);
+#endif
         return -1;
     }
 
@@ -826,10 +838,12 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
             s3dVideoFormat = getS3DVideoFormat(list);
             if (s3dVideoFormat)
                 isS3DCompositionNeeded = isS3DCompositionRequired();
-        } else {
+        } 
+#ifdef USE_OVERLAY
+        else {
             unlockPreviousOverlayBuffer(ctx);
         }
-
+#endif
         if (list->flags & HWC_GEOMETRY_CHANGED) {
             if (yuvBufferCount == 1) {
                 // Inform the gralloc of the current video overlay status
@@ -893,10 +907,12 @@ static int hwc_prepare(hwc_composer_device_t *dev, hwc_layer_list_t* list) {
                     //If C2D is not enabled fall back to GPU.
                     list->hwLayers[i].compositionType = HWC_FRAMEBUFFER;
                 }
+#ifdef USE_OVERLAY
                 if (HWC_USE_OVERLAY != list->hwLayers[i].compositionType) {
                     unlockPreviousOverlayBuffer(ctx);
                     skipComposition = false;
                 }
+#endif
             } else if (isS3DCompositionNeeded) {
                 markUILayerForS3DComposition(list->hwLayers[i], s3dVideoFormat);
             } else if (list->hwLayers[i].flags & HWC_USE_ORIGINAL_RESOLUTION) {
@@ -986,6 +1002,7 @@ private:
 static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer, EGLDisplay dpy,
                                  EGLSurface surface)
 {
+#if 0
     hwc_context_t* ctx = (hwc_context_t*)(dev);
     if(!ctx) {
          LOGE("drawLayerUsingCopybit null context ");
@@ -1082,10 +1099,13 @@ static int drawLayerUsingCopybit(hwc_composer_device_t *dev, hwc_layer_t *layer,
     if (GENLOCK_FAILURE == err) {
         LOGE("%s: genlock_unlock_buffer failed", __FUNCTION__);
     }
-
     return err;
+#endif
+    LOGE("Trying to draw using unimplemented copybit path");
+    return 0;
 }
 
+#ifdef USE_OVERLAY
 static int drawLayerUsingOverlay(hwc_context_t *ctx, hwc_layer_t *layer)
 {
     if (ctx && ctx->mOverlayLibObject) {
@@ -1126,6 +1146,7 @@ static int drawLayerUsingOverlay(hwc_context_t *ctx, hwc_layer_t *layer)
     }
     return -1;
 }
+#endif
 
 static int hwc_set(hwc_composer_device_t *dev,
         hwc_display_t dpy,
@@ -1149,7 +1170,9 @@ static int hwc_set(hwc_composer_device_t *dev,
         unlockPreviousBypassBuffers(ctx);
         unsetBypassBufferLockState(ctx);
 #endif
+#ifdef USE_OVERLAY
         unlockPreviousOverlayBuffer(ctx);
+#endif
         return -1;
     }
 
@@ -1161,8 +1184,10 @@ static int hwc_set(hwc_composer_device_t *dev,
         } else if (list->hwLayers[i].flags & HWC_COMP_BYPASS) {
             drawLayerUsingBypass(ctx, &(list->hwLayers[i]), i);
 #endif
+#ifdef USE_OVERLAY
         } else if (list->hwLayers[i].compositionType == HWC_USE_OVERLAY) {
             drawLayerUsingOverlay(ctx, &(list->hwLayers[i]));
+#endif
         } else if (list->flags & HWC_SKIP_COMPOSITION) {
             break;
         }
@@ -1210,7 +1235,9 @@ static int hwc_set(hwc_composer_device_t *dev,
     }
 #endif
 
+#ifdef USE_OVERLAY
     hwc_closeOverlayChannels(ctx);
+#endif
     int yuvBufferCount = getYUVBufferCount(list);
     setHWCOverlayStatus(ctx, yuvBufferCount);
     return ret;
@@ -1237,11 +1264,15 @@ static int hwc_device_close(struct hw_device_t *dev)
         hwcModule->fbDevice = NULL;
     }
 
+#ifdef USE_OVERLAY
     unlockPreviousOverlayBuffer(ctx);
+#endif
 
     if (ctx) {
+#ifdef USE_OVERLAY
          delete ctx->mOverlayLibObject;
          ctx->mOverlayLibObject = NULL;
+#endif
 #ifdef COMPOSITION_BYPASS
             for(int i = 0; i < MAX_BYPASS_LAYERS; i++) {
                 delete ctx->mOvUI[i];
@@ -1320,7 +1351,9 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
 
         /* initialize our state here */
         memset(dev, 0, sizeof(*dev));
+#ifdef USE_OVERLAY
         dev->mOverlayLibObject = new overlay::Overlay();
+#endif
 #ifdef COMPOSITION_BYPASS
         for(int i = 0; i < MAX_BYPASS_LAYERS; i++) {
             dev->mOvUI[i] = new overlay::OverlayUI();

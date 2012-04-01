@@ -37,6 +37,7 @@ namespace gralloc {
 
     struct alloc_data {
         void           *base;
+        unsigned long  phys;
         int            fd;
         int            offset;
         size_t         size;
